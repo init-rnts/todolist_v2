@@ -15,8 +15,13 @@ mongoose.set("strictQuery", true);
 mongoose.connect("mongodb://127.0.0.1:27017/todolistDB");
 
 const itemsSchema = new mongoose.Schema({name: String});
+const listsSchema = new mongoose.Schema({
+  name: String,
+  items: [itemsSchema]
+});
 
 const Item = mongoose.model("Item", itemsSchema);
+const List = mongoose.model("List", listsSchema);
 
 const item1 = new Item({name: "Welcome to your todolist!"});
 const item2 = new Item({name: "Hit + button to add a new item."});
@@ -49,30 +54,61 @@ app.get("/", function(req, res) {
 app.post("/", function(req, res){
 
   const itemName = req.body.newItem;
+  const listName = req.body.list;
 
-  if (req.body.list === "Work") {
-    workItems.push(item);
-    res.redirect("/work");
-  } else {
+  if (listName === "Today") {
     Item.create({name: itemName});
     res.redirect("/");
+  } else {
+    const item = new Item({name: itemName});
+    List.findOne({name: listName}, (err, results) => {
+      results.items.push(item);
+      results.save();
+      res.redirect(`/${listName}`);
+    });
   }
 });
 
 app.post("/delete", (req, res) => {
+  const id = req.body.checkbox;
+  const listName = req.body.listName;
 
-  Item.findByIdAndDelete(req.body.checkbox, (err) => {
-    if (err) {
-      console.log(err);
-    } else {
-      console.log("Successfully deleted.");
-    }
-  });
-  res.redirect("/");
+  if (listName === "Today") {
+    Item.findByIdAndDelete(id, (err) => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log("Successfully deleted.");
+      }
+    });
+    res.redirect("/");
+  } else {
+    List.findOneAndUpdate(
+      {name: listName},
+      {$pull: {items: {_id: id}}},
+      (err, results) => {
+      if (!err) {
+        res.redirect(`/${listName}`);
+      };
+    });
+  }
+  
 })
 
-app.get("/work", function(req,res){
-  res.render("list", {listTitle: "Work List", newListItems: workItems});
+app.get("/:customListName", (req, res) => {
+  const customListName = req.params.customListName;
+  
+  List.findOne({name: customListName}, (err, results) => {
+    if (results) {
+      res.render("list", {listTitle: results.name, newListItems: results.items});
+    } else {
+      List.create({
+        name: customListName,
+        items: defaultItems
+      });
+      res.redirect(`/${customListName}`);
+    }
+  })
 });
 
 app.get("/about", function(req, res){
